@@ -73,12 +73,12 @@ def pragmatic_features(text):
         return "none"
 
 # ============================
-# Safe Vectorizer (no warnings to user)
+# Safe Vectorizer (silent fallback)
 # ============================
 def safe_vectorize(vectorizer, data):
     try:
         X_vec = vectorizer.fit_transform(data)
-        if X_vec.shape[1] == 0:  # empty vocab fallback
+        if X_vec.shape[1] == 0:
             raise ValueError("Empty vocabulary")
         return X_vec
     except:
@@ -94,7 +94,6 @@ def train_and_eval(model, X_features, y):
             X_features, y, test_size=0.2, random_state=42, stratify=stratify_flag
         )
 
-        # Some models (DecisionTree) need dense input
         need_dense = isinstance(model, DecisionTreeClassifier)
         X_train_in = X_train.toarray() if need_dense and hasattr(X_train, "toarray") else X_train
         X_test_in = X_test.toarray() if need_dense and hasattr(X_test, "toarray") else X_test
@@ -116,7 +115,6 @@ uploaded = st.file_uploader("Upload your CSV file", type=["csv"])
 if uploaded:
     try:
         df = pd.read_csv(uploaded)
-        st.write("Dataset Preview:", df.head())
 
         text_col = st.selectbox("Select the TEXT column", df.columns)
         target_col = st.selectbox("Select the TARGET column", df.columns)
@@ -124,11 +122,10 @@ if uploaded:
         data = df[[text_col, target_col]].dropna().copy()
         data.columns = ["text", "target"]
 
-        # Encode target
+        # Encode target silently
         if data["target"].dtype == object or not np.issubdtype(data["target"].dtype, np.number):
             le = LabelEncoder()
             data["target"] = le.fit_transform(data["target"].astype(str))
-            st.info(f"Target labels encoded: {dict(zip(le.classes_, le.transform(le.classes_)))}")
 
         X = data["text"].astype(str)
         y = data["target"]
@@ -184,19 +181,31 @@ if uploaded:
 
         results_df = pd.DataFrame(results)
 
-        # Pivot for clean 5x4 table
+        # Pivot for 5x4 table
         pivot_df = results_df.pivot(index="Phase", columns="Model", values="Accuracy")
-        st.subheader("📊 Accuracy Comparison Table")
+        st.subheader("📊 Accuracy Comparison Table (Phases × Models)")
         st.dataframe(pivot_df.style.format("{:.4f}"))
 
         # ============================
-        # Visualization: Stacked Bar Chart
+        # Visualization: Grouped Bar Chart (adjacent bars)
         # ============================
-        st.subheader("📈 Phase-wise Accuracies (Stacked Bar)")
-        pivot_df.plot(kind="bar", stacked=True, figsize=(10, 6))
-        plt.ylabel("Accuracy")
-        plt.title("Stacked Accuracy Comparison Across Models")
-        st.pyplot(plt)
+        st.subheader("📈 Phase-wise Accuracy by Model (Grouped Bar Chart)")
+        fig, ax = plt.subplots(figsize=(10,6))
+        phases_list = pivot_df.index.tolist()
+        models_list = pivot_df.columns.tolist()
+        x = np.arange(len(phases_list))
+        width = 0.18
+
+        for i, model_name in enumerate(models_list):
+            ax.bar(x + i*width, pivot_df[model_name], width=width, label=model_name)
+
+        ax.set_xticks(x + width*(len(models_list)-1)/2)
+        ax.set_xticklabels(phases_list, rotation=30)
+        ax.set_ylabel("Accuracy")
+        ax.set_ylim(0, 1)
+        ax.set_title("Phase-wise Accuracy per Model")
+        ax.legend()
+        st.pyplot(fig)
 
         # Classification Reports
         with st.expander("Detailed Classification Reports"):
