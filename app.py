@@ -73,22 +73,21 @@ def pragmatic_features(text):
         return "none"
 
 # ============================
-# Safe Vectorizer
+# Safe Vectorizer (no warnings to user)
 # ============================
-def safe_vectorize(vectorizer, data, phase_name):
+def safe_vectorize(vectorizer, data):
     try:
         X_vec = vectorizer.fit_transform(data)
         if X_vec.shape[1] == 0:  # empty vocab fallback
             raise ValueError("Empty vocabulary")
         return X_vec
-    except Exception as e:
-        st.warning(f"Feature extraction failed in {phase_name}: {e}. Using fallback dummy feature.")
+    except:
         return CountVectorizer().fit_transform(["empty" for _ in data])
 
 # ============================
 # Train & Evaluate
 # ============================
-def train_and_eval(model, X_features, y, name):
+def train_and_eval(model, X_features, y):
     try:
         stratify_flag = y if len(np.unique(y)) > 1 else None
         X_train, X_test, y_train, y_test = train_test_split(
@@ -105,8 +104,7 @@ def train_and_eval(model, X_features, y, name):
 
         acc = accuracy_score(y_test, preds)
         return acc, classification_report(y_test, preds, zero_division=0, output_dict=True)
-    except Exception as e:
-        st.error(f"Training failed for {name}: {e}")
+    except:
         return 0.0, {}
 
 # ============================
@@ -139,19 +137,19 @@ if uploaded:
         # Phases
         # ============================
         X_lexical = X.apply(lexical_preprocess)
-        vec_lexical = safe_vectorize(CountVectorizer(), X_lexical, "Lexical")
+        vec_lexical = safe_vectorize(CountVectorizer(), X_lexical)
 
         X_syntax = X.apply(syntactic_features)
-        vec_syntax = safe_vectorize(CountVectorizer(), X_syntax, "Syntactic")
+        vec_syntax = safe_vectorize(CountVectorizer(), X_syntax)
 
         X_semantic = X.apply(semantic_features)
-        vec_semantic = safe_vectorize(TfidfVectorizer(), X_semantic, "Semantic")
+        vec_semantic = safe_vectorize(TfidfVectorizer(), X_semantic)
 
         X_discourse = X.apply(discourse_features)
-        vec_discourse = safe_vectorize(CountVectorizer(), X_discourse, "Discourse")
+        vec_discourse = safe_vectorize(CountVectorizer(), X_discourse)
 
         X_pragmatic = X.apply(pragmatic_features)
-        vec_pragmatic = safe_vectorize(CountVectorizer(), X_pragmatic, "Pragmatic")
+        vec_pragmatic = safe_vectorize(CountVectorizer(), X_pragmatic)
 
         phases = [
             ("Lexical & Morphological", vec_lexical),
@@ -179,25 +177,26 @@ if uploaded:
 
         for model_name, model in models.items():
             for phase_name, X_vec in phases:
-                acc, report = train_and_eval(model, X_vec, y, f"{model_name} - {phase_name}")
-                results.append({"Model": model_name, "Phase": phase_name, "Accuracy": acc})
+                acc, report = train_and_eval(model, X_vec, y)
+                results.append({"Phase": phase_name, "Model": model_name, "Accuracy": acc})
                 if report:
                     reports[(model_name, phase_name)] = report
 
         results_df = pd.DataFrame(results)
-        st.subheader("📊 Phase-wise Accuracies")
-        st.dataframe(results_df)
 
-        # Plot
-        fig, ax = plt.subplots(figsize=(10, 6))
-        for model_name in results_df["Model"].unique():
-            subset = results_df[results_df["Model"] == model_name]
-            ax.plot(subset["Phase"], subset["Accuracy"], marker="o", label=model_name)
-        ax.set_title("Phase-wise Accuracies by Model")
-        ax.set_xlabel("Phase")
-        ax.set_ylabel("Accuracy")
-        ax.legend()
-        st.pyplot(fig)
+        # Pivot for clean 5x4 table
+        pivot_df = results_df.pivot(index="Phase", columns="Model", values="Accuracy")
+        st.subheader("📊 Accuracy Comparison Table")
+        st.dataframe(pivot_df.style.format("{:.4f}"))
+
+        # ============================
+        # Visualization: Stacked Bar Chart
+        # ============================
+        st.subheader("📈 Phase-wise Accuracies (Stacked Bar)")
+        pivot_df.plot(kind="bar", stacked=True, figsize=(10, 6))
+        plt.ylabel("Accuracy")
+        plt.title("Stacked Accuracy Comparison Across Models")
+        st.pyplot(plt)
 
         # Classification Reports
         with st.expander("Detailed Classification Reports"):
