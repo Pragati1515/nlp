@@ -15,6 +15,53 @@ import numpy as np
 import matplotlib.pyplot as plt
 import streamlit as st
 
+# =========================================
+# 1️⃣ Basic Libraries
+# =========================================
+import streamlit as st
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import string
+
+# =========================================
+# 2️⃣ NLTK for NLP
+# =========================================
+import nltk
+from nltk.corpus import stopwords
+from nltk.stem import WordNetLemmatizer
+from textblob import TextBlob
+
+# Download NLTK data (quietly, no popups)
+nltk.download("punkt", quiet=True)
+nltk.download("stopwords", quiet=True)
+nltk.download("wordnet", quiet=True)
+nltk.download("omw-1.4", quiet=True)
+nltk.download("averaged_perceptron_tagger", quiet=True)
+
+# Initialize lemmatizer and custom stopwords
+lemmatizer = WordNetLemmatizer()
+custom_stopwords = set(
+    w for w in stopwords.words("english")
+    if w not in ["not", "no", "nor", "against", "is", "are", "be", "been"]
+)
+
+# Pragmatic words for features
+pragmatic_words = ["must", "should", "might", "could", "will", "?", "!"]
+
+# =========================================
+# 3️⃣ Sklearn for ML
+# =========================================
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import LabelEncoder
+from sklearn.feature_extraction.text import CountVectorizer, TfidfVectorizer
+from sklearn.naive_bayes import MultinomialNB
+from sklearn.svm import SVC
+from sklearn.linear_model import LogisticRegression
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.metrics import accuracy_score, classification_report
+
+
 from nltk.corpus import stopwords
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
