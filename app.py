@@ -82,16 +82,18 @@ def pragmatic_features(text):
         return str(text)
 
 # =========================================
-# Vectorization (fixed)
+# Vectorizer Function
 # =========================================
-def get_vectorizer(phase_name, max_features=3000):
+def get_vectorizer(phase_name, max_features=1500):
     if phase_name in ["Lexical & Morphological", "Syntactic"]:
-        return TfidfVectorizer(max_features=max_features, ngram_range=(1,2))
+        return TfidfVectorizer(max_features=max_features, ngram_range=(1, 2),
+                               min_df=3, max_df=0.8)
     else:
-        return TfidfVectorizer(analyzer="char_wb", ngram_range=(3,5), max_features=max_features)
+        return TfidfVectorizer(analyzer="char_wb", ngram_range=(3, 5),
+                               max_features=max_features, min_df=3, max_df=0.8)
 
 # =========================================
-# Model Training
+# Train & Evaluate
 # =========================================
 def train_and_eval(model, X_train, X_test, y_train, y_test):
     model.fit(X_train, y_train)
@@ -101,10 +103,10 @@ def train_and_eval(model, X_train, X_test, y_train, y_test):
     return acc, rpt
 
 # =========================================
-# Streamlit App
+# Streamlit UI
 # =========================================
 st.title("📰 Fake News Detection: Phase-wise NLP")
-st.write("Upload your dataset and compare performance across linguistic phases.")
+st.write("Upload your dataset and evaluate linguistic phase performance with reduced overfitting.")
 
 uploaded = st.file_uploader("Upload CSV", type=["csv"])
 
@@ -120,15 +122,22 @@ if uploaded is not None:
         if data["target"].dtype == object:
             data["target"] = LabelEncoder().fit_transform(data["target"].astype(str))
 
+        # Safe Stratify Split
+        class_counts = data["target"].value_counts()
+        if (class_counts < 2).any():
+            st.warning("⚠️ Some classes have fewer than 2 samples — using random split instead of stratify.")
+            stratify_opt = None
+        else:
+            stratify_opt = data["target"]
+
         X_train, X_test, y_train, y_test = train_test_split(
             data["text"].astype(str),
             data["target"],
             test_size=0.2,
             random_state=42,
-            stratify=data["target"]
+            stratify=stratify_opt
         )
 
-        # Preprocess once per phase
         preprocessors = {
             "Lexical & Morphological": lexical_preprocess,
             "Syntactic": syntactic_features,
@@ -139,17 +148,15 @@ if uploaded is not None:
 
         models = {
             "Naive Bayes": MultinomialNB(),
-            "SVM": SVC(kernel="linear", probability=True),
-            "Logistic Regression": LogisticRegression(max_iter=1000),
-            "Decision Tree": DecisionTreeClassifier(max_depth=20),
+            "SVM": SVC(kernel="linear", probability=True, C=0.8),
+            "Logistic Regression": LogisticRegression(max_iter=1000, C=0.8),
+            "Decision Tree": DecisionTreeClassifier(max_depth=10, random_state=42),
         }
 
         results = []
-        trained_models = {}
-        vectorizers = {}
 
         for phase_name, func in preprocessors.items():
-            st.write(f"Processing phase: **{phase_name}** ...")
+            st.write(f"🧠 Processing phase: **{phase_name}** ...")
             Xtr_prep = X_train.apply(func)
             Xte_prep = X_test.apply(func)
 
@@ -157,12 +164,9 @@ if uploaded is not None:
             Xtr_vec = vectorizer.fit_transform(Xtr_prep)
             Xte_vec = vectorizer.transform(Xte_prep)
 
-            vectorizers[phase_name] = vectorizer
-
             for model_name, model in models.items():
                 acc, rpt = train_and_eval(model, Xtr_vec, Xte_vec, y_train, y_test)
                 results.append({"Phase": phase_name, "Model": model_name, "Accuracy": acc})
-                trained_models[(model_name, phase_name)] = model
 
         results_df = pd.DataFrame(results)
         pivot_df = results_df.pivot(index="Phase", columns="Model", values="Accuracy")
@@ -170,34 +174,17 @@ if uploaded is not None:
         st.subheader("📊 Accuracy Comparison")
         st.dataframe(pivot_df.style.format("{:.4f}"))
 
-        fig, ax = plt.subplots(figsize=(9,5))
+        # Bar Chart
+        fig, ax = plt.subplots(figsize=(9, 5))
         x = np.arange(len(pivot_df.index))
         width = 0.18
         for i, model in enumerate(pivot_df.columns):
-            ax.bar(x + i*width, pivot_df[model], width, label=model)
-        ax.set_xticks(x + width*1.5)
+            ax.bar(x + i * width, pivot_df[model], width, label=model)
+        ax.set_xticks(x + width * 1.5)
         ax.set_xticklabels(pivot_df.index, rotation=20)
         ax.set_ylim(0, 1)
         ax.legend()
         st.pyplot(fig)
-
-        # =====================================
-        # New Text Prediction (fixed)
-        # =====================================
-        st.subheader("📝 Predict New Text")
-        new_text = st.text_area("Enter text to analyze:")
-        if st.button("Predict"):
-            if new_text.strip():
-                results_list = []
-                for (model_name, phase_name), model in trained_models.items():
-                    vectorizer = vectorizers[phase_name]
-                    func = preprocessors[phase_name]
-                    new_vec = vectorizer.transform([func(new_text)])
-                    pred = model.predict(new_vec)[0]
-                    results_list.append(f"{model_name} ({phase_name}) → {pred}")
-                st.write(results_list)
-            else:
-                st.warning("Please enter some text first!")
 
     except Exception as e:
         st.error(f"Error: {e}")
