@@ -7,6 +7,8 @@ from nltk.corpus import stopwords
 from nltk.stem import WordNetLemmatizer
 from textblob import TextBlob
 
+ nltk.download('stopwords')
+
 nltk.download("averaged_perceptron_tagger")
 
 # Light stopwords: exclude negations and auxiliaries
