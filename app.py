@@ -162,11 +162,15 @@ def train_and_eval(model, X_train, X_test, y_train, y_test):
 
 st.title("📰 Fake News Detection: Phase-wise NLP with Multiple Models")
 
-# ⬇️ File uploader (this was missing)
-uploaded = st.file_uploader("Upload your dataset (CSV)", type=["csv"])
+# ====================================
+# File Upload
+# ====================================
+uploaded = st.file_uploader("Upload your CSV file", type=["csv"])
 
 if uploaded is not None:
-    try:
+    try:  # ⬅️ Start try here
+
+        # 1️⃣ Read file & select columns
         df = pd.read_csv(uploaded)
         text_col = st.selectbox("Select TEXT column", df.columns)
         target_col = st.selectbox("Select TARGET column", df.columns)
@@ -174,19 +178,20 @@ if uploaded is not None:
         data = df[[text_col, target_col]].dropna().copy()
         data.columns = ["text", "target"]
 
-        # Label encode target if needed
+        # Encode target if needed
         if data["target"].dtype == object:
             data["target"] = LabelEncoder().fit_transform(data["target"].astype(str))
 
-        # Train-test split
+        # 2️⃣ Train-test split
         X_train, X_test, y_train, y_test = train_test_split(
-            data["text"].astype(str), data["target"],
-            test_size=0.2, random_state=42, stratify=data["target"]
+            data["text"].astype(str),
+            data["target"],
+            test_size=0.2,
+            random_state=42,
+            stratify=data["target"]
         )
 
-        # ====================================
-        # Feature Extraction Phases
-        # ====================================
+        # 3️⃣ Preprocessing phases
         train_phases = {
             "Lexical & Morphological": X_train.apply(lexical_preprocess),
             "Syntactic": X_train.apply(syntactic_features),
@@ -202,9 +207,7 @@ if uploaded is not None:
             "Pragmatic": X_test.apply(pragmatic_features),
         }
 
-        # ====================================
-        # Model Training
-        # ====================================
+        # 4️⃣ Model Training & Evaluation
         models = {
             "Naive Bayes": MultinomialNB(),
             "SVM": SVC(kernel="linear", probability=True),
@@ -216,25 +219,13 @@ if uploaded is not None:
         reports = {}
 
         for model_name, model in models.items():
-    for phase_name in train_phases.keys():
-        # ✅ Get vectorizer and train/test vectors safely
-        _, Xtr, Xte = vectorize_phase(
-            train_phases[phase_name],
-            test_phases[phase_name],
-            phase_name
-        )
+            for phase_name in train_phases.keys():
+                _, Xtr, Xte = vectorize_phase(train_phases[phase_name], test_phases[phase_name], phase_name)
+                acc, rpt = train_and_eval(model, Xtr, Xte, y_train, y_test)
+                results.append({"Phase": phase_name, "Model": model_name, "Accuracy": acc})
+                reports[(model_name, phase_name)] = rpt
 
-        # Train & evaluate
-        acc, rpt = train_and_eval(model, Xtr, Xte, y_train, y_test)
-
-        # Save results
-        results.append({"Phase": phase_name, "Model": model_name, "Accuracy": acc})
-        reports[(model_name, phase_name)] = rpt
-
-
-        # ====================================
-        # Results Visualization
-        # ====================================
+        # 5️⃣ Results Visualization
         results_df = pd.DataFrame(results)
         pivot_df = results_df.pivot(index="Phase", columns="Model", values="Accuracy")
         st.subheader("📊 Accuracy Comparison Table")
@@ -253,5 +244,5 @@ if uploaded is not None:
         ax.set_ylim(0,1)
         st.pyplot(fig)
 
-    except Exception as e:
+    except Exception as e:  # ⬅️ Catch errors here
         st.error(f"Error: {e}")
