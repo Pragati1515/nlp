@@ -6,9 +6,23 @@ import nltk
 from nltk.corpus import stopwords
 from nltk.stem import WordNetLemmatizer
 from textblob import TextBlob
-import streamlit as st
-import pandas as pd
+
 nltk.download('stopwords')
+
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import streamlit as st
+import nltk
+from nltk.corpus import stopwords
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import LabelEncoder
+from sklearn.feature_extraction.text import CountVectorizer, TfidfVectorizer
+from sklearn.naive_bayes import MultinomialNB
+from sklearn.svm import SVC
+from sklearn.linear_model import LogisticRegression
+from sklearn.tree import DecisionTreeClassifier
+
 
 nltk.download("averaged_perceptron_tagger")
 
