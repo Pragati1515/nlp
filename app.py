@@ -216,11 +216,21 @@ if uploaded is not None:
         reports = {}
 
         for model_name, model in models.items():
-            for phase_name in train_phases.keys():
-                Xtr, Xte = vectorize_phase(train_phases[phase_name], test_phases[phase_name], phase_name)
-                acc, rpt = train_and_eval(model, Xtr, Xte, y_train, y_test)
-                results.append({"Phase": phase_name, "Model": model_name, "Accuracy": acc})
-                reports[(model_name, phase_name)] = rpt
+    for phase_name in train_phases.keys():
+        # ✅ Get vectorizer and train/test vectors safely
+        _, Xtr, Xte = vectorize_phase(
+            train_phases[phase_name],
+            test_phases[phase_name],
+            phase_name
+        )
+
+        # Train & evaluate
+        acc, rpt = train_and_eval(model, Xtr, Xte, y_train, y_test)
+
+        # Save results
+        results.append({"Phase": phase_name, "Model": model_name, "Accuracy": acc})
+        reports[(model_name, phase_name)] = rpt
+
 
         # ====================================
         # Results Visualization
