@@ -2,6 +2,7 @@
 # Improved Preprocessing Functions
 # ====================================
 from sklearn.feature_extraction.text import TfidfVectorizer
+import nltk
 
 nltk.download("averaged_perceptron_tagger")
 
