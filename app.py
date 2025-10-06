@@ -193,4 +193,11 @@ if uploaded is not None:
                     vectorizer = vectorizers[phase_name]
                     func = preprocessors[phase_name]
                     new_vec = vectorizer.transform([func(new_text)])
-                    pred = model.predict(new_vec)_
+                    pred = model.predict(new_vec)[0]
+                    results_list.append(f"{model_name} ({phase_name}) → {pred}")
+                st.write(results_list)
+            else:
+                st.warning("Please enter some text first!")
+
+    except Exception as e:
+        st.error(f"Error: {e}")
