@@ -94,7 +94,13 @@ def train_and_eval(model, X_train, X_test, y_train, y_test):
 # ====================================
 # Main Logic After File Upload
 # ====================================
-if uploaded:
+
+st.title("📰 Fake News Detection: Phase-wise NLP with Multiple Models")
+
+# ⬇️ File uploader (this was missing)
+uploaded = st.file_uploader("Upload your dataset (CSV)", type=["csv"])
+
+if uploaded is not None:
     try:
         df = pd.read_csv(uploaded)
         text_col = st.selectbox("Select TEXT column", df.columns)
@@ -107,12 +113,15 @@ if uploaded:
         if data["target"].dtype == object:
             data["target"] = LabelEncoder().fit_transform(data["target"].astype(str))
 
+        # Train-test split
         X_train, X_test, y_train, y_test = train_test_split(
             data["text"].astype(str), data["target"],
             test_size=0.2, random_state=42, stratify=data["target"]
         )
 
-        # Phase transformations
+        # ====================================
+        # Feature Extraction Phases
+        # ====================================
         train_phases = {
             "Lexical & Morphological": X_train.apply(lexical_preprocess),
             "Syntactic": X_train.apply(syntactic_features),
@@ -128,7 +137,9 @@ if uploaded:
             "Pragmatic": X_test.apply(pragmatic_features),
         }
 
-        # Models
+        # ====================================
+        # Model Training
+        # ====================================
         models = {
             "Naive Bayes": MultinomialNB(),
             "SVM": SVC(kernel="linear", probability=True),
@@ -146,6 +157,9 @@ if uploaded:
                 results.append({"Phase": phase_name, "Model": model_name, "Accuracy": acc})
                 reports[(model_name, phase_name)] = rpt
 
+        # ====================================
+        # Results Visualization
+        # ====================================
         results_df = pd.DataFrame(results)
         pivot_df = results_df.pivot(index="Phase", columns="Model", values="Accuracy")
         st.subheader("📊 Accuracy Comparison Table")
