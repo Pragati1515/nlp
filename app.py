@@ -1,4 +1,4 @@
-# app.py
+# app.py (Improved Version)
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -8,7 +8,7 @@ from nltk.stem import WordNetLemmatizer
 from textblob import TextBlob
 
 from sklearn.model_selection import train_test_split
-from sklearn.feature_extraction.text import CountVectorizer, TfidfVectorizer
+from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.naive_bayes import MultinomialNB
 from sklearn.svm import SVC
 from sklearn.linear_model import LogisticRegression
@@ -18,146 +18,140 @@ from sklearn.preprocessing import LabelEncoder
 
 import matplotlib.pyplot as plt
 
-# Download NLTK resources
+# ============================
+# Download NLTK Data
+# ============================
 nltk.download("punkt")
 nltk.download("wordnet")
 nltk.download("stopwords")
+nltk.download("averaged_perceptron_tagger")
 
-# ============================
-# Preprocessing
-# ============================
 lemmatizer = WordNetLemmatizer()
 stop_words = set(stopwords.words("english"))
 
+# ============================
+# Text Preprocessing Functions
+# ============================
 def lexical_preprocess(text):
+    """Tokenize, clean and lemmatize text"""
     try:
-        tokens = nltk.word_tokenize(text.lower())
-        tokens = [lemmatizer.lemmatize(w) for w in tokens if w not in stop_words and w not in string.punctuation]
-        return " ".join(tokens) if tokens else "empty"
-    except:
-        return "empty"
+        tokens = nltk.word_tokenize(str(text).lower())
+        clean_tokens = [
+            lemmatizer.lemmatize(w)
+            for w in tokens
+            if w not in stop_words and w not in string.punctuation and w.isalpha()
+        ]
+        return " ".join(clean_tokens)
+    except Exception:
+        return str(text).lower()
 
 def syntactic_features(text):
     try:
-        tokens = nltk.word_tokenize(text)
-        pos_tags = [tag for (_, tag) in nltk.pos_tag(tokens)]
-        return " ".join(pos_tags) if pos_tags else "empty"
-    except:
-        return "empty"
+        tokens = nltk.word_tokenize(str(text))
+        pos_tags = nltk.pos_tag(tokens)
+        tags = [tag for _, tag in pos_tags]
+        return " ".join(tags)
+    except Exception:
+        return "NN"
 
 def semantic_features(text):
     try:
-        blob = TextBlob(text)
+        blob = TextBlob(str(text))
         return f"{blob.sentiment.polarity} {blob.sentiment.subjectivity}"
-    except:
+    except Exception:
         return "0 0"
 
 def discourse_features(text):
     try:
-        sentences = nltk.sent_tokenize(text)
-        first_words = [s.split()[0] for s in sentences if len(s.split()) > 0]
-        return f"{len(sentences)} {' '.join(first_words)}" if sentences else "0"
-    except:
+        sentences = nltk.sent_tokenize(str(text))
+        return f"{len(sentences)}"
+    except Exception:
         return "0"
 
 pragmatic_words = ["must", "should", "might", "could", "will", "?", "!"]
 
 def pragmatic_features(text):
     try:
-        tokens = []
-        for w in pragmatic_words:
-            count = text.lower().count(w)
-            tokens.extend([w] * count)
-        return " ".join(tokens) if tokens else "none"
-    except:
+        t = str(text).lower()
+        counts = [t.count(w) for w in pragmatic_words]
+        return " ".join([f"{w}:{c}" for w, c in zip(pragmatic_words, counts)])
+    except Exception:
         return "none"
 
 # ============================
-# Safe Vectorizer (silent fallback)
+# Vectorization Helper
 # ============================
-def safe_vectorize(vectorizer, data):
+def fit_vectorizer(train_data, test_data, vectorizer):
+    """Fit TF-IDF on train and transform both train/test"""
     try:
-        X_vec = vectorizer.fit_transform(data)
-        if X_vec.shape[1] == 0:
-            raise ValueError("Empty vocabulary")
-        return X_vec
-    except:
-        return CountVectorizer().fit_transform(["empty" for _ in data])
+        vec = vectorizer.fit(train_data)
+        X_train = vec.transform(train_data)
+        X_test = vec.transform(test_data)
+        return X_train, X_test
+    except Exception:
+        st.warning("Vectorization failed — check data cleanliness.")
+        dummy_vec = TfidfVectorizer().fit(["empty"])
+        return dummy_vec.transform(train_data), dummy_vec.transform(test_data)
 
 # ============================
-# Train & Evaluate
+# Model Training Function
 # ============================
-def train_and_eval(model, X_features, y):
-    try:
-        stratify_flag = y if len(np.unique(y)) > 1 else None
-        X_train, X_test, y_train, y_test = train_test_split(
-            X_features, y, test_size=0.2, random_state=42, stratify=stratify_flag
-        )
-
-        need_dense = isinstance(model, DecisionTreeClassifier)
-        X_train_in = X_train.toarray() if need_dense and hasattr(X_train, "toarray") else X_train
-        X_test_in = X_test.toarray() if need_dense and hasattr(X_test, "toarray") else X_test
-
-        model.fit(X_train_in, y_train)
-        preds = model.predict(X_test_in)
-
-        acc = accuracy_score(y_test, preds)
-        return acc, classification_report(y_test, preds, zero_division=0, output_dict=True)
-    except:
-        return 0.0, {}
+def train_and_eval(model, X_train, X_test, y_train, y_test):
+    model.fit(X_train, y_train)
+    preds = model.predict(X_test)
+    acc = accuracy_score(y_test, preds)
+    report = classification_report(y_test, preds, zero_division=0, output_dict=True)
+    return acc, report
 
 # ============================
-# Streamlit App
+# Streamlit UI
 # ============================
-st.title("📰 Fake News Detection: Phase-wise NLP with Multiple Models")
+st.title("📰 Enhanced Fake News Detection - Phase-wise NLP")
 
-uploaded = st.file_uploader("Upload your CSV file", type=["csv"])
+uploaded = st.file_uploader("Upload CSV file (with text + target)", type=["csv"])
+
 if uploaded:
     try:
         df = pd.read_csv(uploaded)
+        text_col = st.selectbox("Select text column", df.columns)
+        target_col = st.selectbox("Select target column", df.columns)
 
-        text_col = st.selectbox("Select the TEXT column", df.columns)
-        target_col = st.selectbox("Select the TARGET column", df.columns)
+        df = df[[text_col, target_col]].dropna().copy()
+        df.columns = ["text", "target"]
 
-        data = df[[text_col, target_col]].dropna().copy()
-        data.columns = ["text", "target"]
+        # Encode labels
+        le = LabelEncoder()
+        df["target"] = le.fit_transform(df["target"].astype(str))
 
-        # Encode target silently
-        if data["target"].dtype == object or not np.issubdtype(data["target"].dtype, np.number):
-            le = LabelEncoder()
-            data["target"] = le.fit_transform(data["target"].astype(str))
+        X = df["text"].astype(str)
+        y = df["target"]
 
-        X = data["text"].astype(str)
-        y = data["target"]
-
-        # ============================
-        # Phases
-        # ============================
-        X_lexical = X.apply(lexical_preprocess)
-        vec_lexical = safe_vectorize(CountVectorizer(), X_lexical)
-
-        X_syntax = X.apply(syntactic_features)
-        vec_syntax = safe_vectorize(CountVectorizer(), X_syntax)
-
-        X_semantic = X.apply(semantic_features)
-        vec_semantic = safe_vectorize(TfidfVectorizer(), X_semantic)
-
-        X_discourse = X.apply(discourse_features)
-        vec_discourse = safe_vectorize(CountVectorizer(), X_discourse)
-
-        X_pragmatic = X.apply(pragmatic_features)
-        vec_pragmatic = safe_vectorize(CountVectorizer(), X_pragmatic)
-
-        phases = [
-            ("Lexical & Morphological", vec_lexical),
-            ("Syntactic", vec_syntax),
-            ("Semantic", vec_semantic),
-            ("Discourse", vec_discourse),
-            ("Pragmatic", vec_pragmatic),
-        ]
+        # Split before vectorizing (important!)
+        X_train_raw, X_test_raw, y_train, y_test = train_test_split(
+            X, y, test_size=0.2, random_state=42, stratify=y
+        )
 
         # ============================
-        # Models
+        # Create Feature Phases
+        # ============================
+        train_phases = {
+            "Lexical & Morphological": X_train_raw.apply(lexical_preprocess),
+            "Syntactic": X_train_raw.apply(syntactic_features),
+            "Semantic": X_train_raw.apply(semantic_features),
+            "Discourse": X_train_raw.apply(discourse_features),
+            "Pragmatic": X_train_raw.apply(pragmatic_features),
+        }
+
+        test_phases = {
+            "Lexical & Morphological": X_test_raw.apply(lexical_preprocess),
+            "Syntactic": X_test_raw.apply(syntactic_features),
+            "Semantic": X_test_raw.apply(semantic_features),
+            "Discourse": X_test_raw.apply(discourse_features),
+            "Pragmatic": X_test_raw.apply(pragmatic_features),
+        }
+
+        # ============================
+        # Define Models
         # ============================
         models = {
             "Naive Bayes": MultinomialNB(),
@@ -167,52 +161,51 @@ if uploaded:
         }
 
         # ============================
-        # Run Experiments
+        # Train + Evaluate
         # ============================
-        results = []
-        reports = {}
+        results, reports = [], {}
+        vectorizer = TfidfVectorizer(max_features=5000)
 
-        for model_name, model in models.items():
-            for phase_name, X_vec in phases:
-                acc, report = train_and_eval(model, X_vec, y)
+        for phase_name in train_phases.keys():
+            X_train_vec, X_test_vec = fit_vectorizer(
+                train_phases[phase_name], test_phases[phase_name], vectorizer
+            )
+            for model_name, model in models.items():
+                acc, report = train_and_eval(model, X_train_vec, X_test_vec, y_train, y_test)
                 results.append({"Phase": phase_name, "Model": model_name, "Accuracy": acc})
-                if report:
-                    reports[(model_name, phase_name)] = report
+                reports[(model_name, phase_name)] = report
 
         results_df = pd.DataFrame(results)
-
-        # Pivot for 5x4 table
         pivot_df = results_df.pivot(index="Phase", columns="Model", values="Accuracy")
-        st.subheader("📊 Accuracy Comparison Table (Phases × Models)")
+
+        st.subheader("📊 Accuracy Comparison (Phases × Models)")
         st.dataframe(pivot_df.style.format("{:.4f}"))
 
         # ============================
-        # Visualization: Grouped Bar Chart (adjacent bars)
+        # Visualization
         # ============================
-        st.subheader("📈 Phase-wise Accuracy by Model (Grouped Bar Chart)")
-        fig, ax = plt.subplots(figsize=(10,6))
+        st.subheader("📈 Grouped Bar Chart: Model Accuracy by Phase")
+        fig, ax = plt.subplots(figsize=(10, 6))
         phases_list = pivot_df.index.tolist()
         models_list = pivot_df.columns.tolist()
         x = np.arange(len(phases_list))
         width = 0.18
 
         for i, model_name in enumerate(models_list):
-            ax.bar(x + i*width, pivot_df[model_name], width=width, label=model_name)
+            ax.bar(x + i * width, pivot_df[model_name], width=width, label=model_name)
 
-        ax.set_xticks(x + width*(len(models_list)-1)/2)
+        ax.set_xticks(x + width * (len(models_list) - 1) / 2)
         ax.set_xticklabels(phases_list, rotation=30)
         ax.set_ylabel("Accuracy")
         ax.set_ylim(0, 1)
-        ax.set_title("Phase-wise Accuracy per Model")
         ax.legend()
         st.pyplot(fig)
 
-        # Classification Reports
         with st.expander("Detailed Classification Reports"):
             for (model_name, phase_name), report in reports.items():
-                st.write(f"### {model_name} - {phase_name}")
+                st.markdown(f"#### {model_name} - {phase_name}")
                 rpt_df = pd.DataFrame(report).transpose()
                 st.dataframe(rpt_df)
 
     except Exception as e:
-        st.error(f"Error processing file: {e}")
+        st.error(f"Error: {e}")
