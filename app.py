@@ -7,7 +7,7 @@ from nltk.corpus import stopwords
 from nltk.stem import WordNetLemmatizer
 from textblob import TextBlob
 import streamlit as st
-
+import pandas as pd
 nltk.download('stopwords')
 
 nltk.download("averaged_perceptron_tagger")
