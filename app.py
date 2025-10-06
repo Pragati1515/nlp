@@ -20,9 +20,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.metrics import accuracy_score, classification_report
 
-# =========================================
-# NLTK Setup
-# =========================================
+# NLTK setup
 nltk.download("punkt", quiet=True)
 nltk.download("stopwords", quiet=True)
 nltk.download("wordnet", quiet=True)
@@ -36,7 +34,7 @@ custom_stopwords = set(
 pragmatic_words = ["must", "should", "might", "could", "will", "?", "!"]
 
 # =========================================
-# Text Preprocessing Functions
+# Text Processing Functions
 # =========================================
 def lexical_preprocess(text):
     try:
@@ -84,18 +82,18 @@ def pragmatic_features(text):
         return str(text)
 
 # =========================================
-# Vectorizer Function (safe for small datasets)
+# Vectorizer Function
 # =========================================
 def get_vectorizer(phase_name, max_features=1500):
     if phase_name in ["Lexical & Morphological", "Syntactic"]:
-        return TfidfVectorizer(max_features=max_features, ngram_range=(1,2),
-                               min_df=1, max_df=0.95)
+        return TfidfVectorizer(max_features=max_features, ngram_range=(1, 2),
+                               min_df=3, max_df=0.8)
     else:
-        return TfidfVectorizer(analyzer="char_wb", ngram_range=(3,5),
-                               max_features=max_features, min_df=1, max_df=0.95)
+        return TfidfVectorizer(analyzer="char_wb", ngram_range=(3, 5),
+                               max_features=max_features, min_df=3, max_df=0.8)
 
 # =========================================
-# Train & Evaluate Model
+# Train & Evaluate
 # =========================================
 def train_and_eval(model, X_train, X_test, y_train, y_test):
     model.fit(X_train, y_train)
@@ -105,10 +103,10 @@ def train_and_eval(model, X_train, X_test, y_train, y_test):
     return acc, rpt
 
 # =========================================
-# Streamlit App
+# Streamlit UI
 # =========================================
 st.title("📰 Fake News Detection: Phase-wise NLP")
-st.write("Upload your dataset and evaluate models across different NLP phases.")
+st.write("Upload your dataset and evaluate linguistic phase performance with reduced overfitting.")
 
 uploaded = st.file_uploader("Upload CSV", type=["csv"])
 
@@ -121,24 +119,23 @@ if uploaded is not None:
         data = df[[text_col, target_col]].dropna().copy()
         data.columns = ["text", "target"]
 
-        # Encode labels if necessary
         if data["target"].dtype == object:
             data["target"] = LabelEncoder().fit_transform(data["target"].astype(str))
 
-        # Drop classes with <2 samples
+        # Safe Stratify Split
         class_counts = data["target"].value_counts()
-        tiny_classes = class_counts[class_counts < 2].index
-        if len(tiny_classes) > 0:
-            st.warning(f"Dropping classes with <2 samples: {list(tiny_classes)}")
-            data = data[~data["target"].isin(tiny_classes)]
+        if (class_counts < 2).any():
+            st.warning("⚠️ Some classes have fewer than 2 samples — using random split instead of stratify.")
+            stratify_opt = None
+        else:
+            stratify_opt = data["target"]
 
-        # Safe stratified split
         X_train, X_test, y_train, y_test = train_test_split(
             data["text"].astype(str),
             data["target"],
             test_size=0.2,
             random_state=42,
-            stratify=data["target"]
+            stratify=stratify_opt
         )
 
         preprocessors = {
@@ -150,7 +147,7 @@ if uploaded is not None:
         }
 
         models = {
-            "Naive Bayes": MultinomialNB(alpha=0.5),
+            "Naive Bayes": MultinomialNB(),
             "SVM": SVC(kernel="linear", probability=True, C=0.8),
             "Logistic Regression": LogisticRegression(max_iter=1000, C=0.8),
             "Decision Tree": DecisionTreeClassifier(max_depth=10, random_state=42),
@@ -178,14 +175,14 @@ if uploaded is not None:
         st.dataframe(pivot_df.style.format("{:.4f}"))
 
         # Bar Chart
-        fig, ax = plt.subplots(figsize=(9,5))
+        fig, ax = plt.subplots(figsize=(9, 5))
         x = np.arange(len(pivot_df.index))
         width = 0.18
         for i, model in enumerate(pivot_df.columns):
-            ax.bar(x + i*width, pivot_df[model], width, label=model)
-        ax.set_xticks(x + width*1.5)
+            ax.bar(x + i * width, pivot_df[model], width, label=model)
+        ax.set_xticks(x + width * 1.5)
         ax.set_xticklabels(pivot_df.index, rotation=20)
-        ax.set_ylim(0,1)
+        ax.set_ylim(0, 1)
         ax.legend()
         st.pyplot(fig)
 
