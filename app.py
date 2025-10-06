@@ -78,16 +78,17 @@ nltk.download("averaged_perceptron_tagger")
 custom_stopwords = set(w for w in stopwords.words("english") if w not in ["not", "no", "nor", "was", "is", "are", "be", "been"])
 
 def lexical_preprocess(text):
-    text = str(text).lower()
-    tokens = nltk.word_tokenize(text)
-    cleaned = [
-        lemmatizer.lemmatize(w)
-        for w in tokens
-        if w not in custom_stopwords
-        and w not in string.punctuation
-        and len(w) > 1
-    ]
-    return " ".join(cleaned)
+    try:
+        tokens = nltk.word_tokenize(str(text).lower())
+        cleaned = [
+            lemmatizer.lemmatize(w)
+            for w in tokens
+            if w not in custom_stopwords and w not in string.punctuation and len(w) > 1
+        ]
+        return " ".join(cleaned) if cleaned else "empty_doc"
+    except:
+        return "empty_doc"
+
 
 def syntactic_features(text):
     try:
@@ -120,29 +121,30 @@ def pragmatic_features(text):
 # ====================================
 # Phase Vectorization Function
 # ====================================
-def vectorize_phase(train_texts, test_texts, phase_name):
-    """
-    Phase-aware vectorizer: uses suitable TF-IDF config for each feature type.
-    """
-    if phase_name in ["Lexical & Morphological", "Syntactic"]:
-        vectorizer = TfidfVectorizer(
-            max_features=5000,
-            ngram_range=(1, 2),
-            token_pattern=r"(?u)\b\w+\b",
-            lowercase=True,
-        )
-    elif phase_name in ["Semantic", "Discourse", "Pragmatic"]:
-        # smaller feature set, use char n-grams for robustness
-        vectorizer = TfidfVectorizer(
-            analyzer="char_wb",
-            ngram_range=(3, 5),
-            max_features=3000
-        )
-    else:
-        vectorizer = TfidfVectorizer(max_features=5000)
+def vectorize_phase(train_texts, test_texts, phase_name, max_features=5000):
+    # Ensure strings
+    train_texts = [str(t) if pd.notnull(t) else "empty_doc" for t in train_texts]
+    test_texts  = [str(t) if pd.notnull(t) else "empty_doc" for t in test_texts]
 
-    vectorizer.fit(train_texts)
-    return vectorizer.transform(train_texts), vectorizer.transform(test_texts)
+    # Choose vectorizer based on phase
+    if phase_name in ["Lexical & Morphological", "Syntactic"]:
+        vectorizer = TfidfVectorizer(max_features=max_features, ngram_range=(1,2), token_pattern=r"(?u)\b\w+\b")
+    else:
+        vectorizer = TfidfVectorizer(analyzer="char_wb", ngram_range=(3,5), max_features=3000)
+
+    # Try fitting
+    try:
+        X_train = vectorizer.fit_transform(train_texts)
+        X_test = vectorizer.transform(test_texts)
+        if X_train.shape[1] == 0:
+            raise ValueError("Empty vocabulary detected")
+        return vectorizer, X_train, X_test
+    except Exception as e:
+        # Fallback: char-level TF-IDF
+        vectorizer = TfidfVectorizer(analyzer="char_wb", ngram_range=(3,5), max_features=1000)
+        X_train = vectorizer.fit_transform(train_texts)
+        X_test = vectorizer.transform(test_texts)
+        return vectorizer, X_train, X_test
 
 # ====================================
 # Train & Evaluate
