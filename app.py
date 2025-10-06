@@ -3,6 +3,9 @@
 # ====================================
 from sklearn.feature_extraction.text import TfidfVectorizer
 import nltk
+from nltk.corpus import stopwords
+from nltk.stem import WordNetLemmatizer
+from textblob import TextBlob
 
 nltk.download("averaged_perceptron_tagger")
 
