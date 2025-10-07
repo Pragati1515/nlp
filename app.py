@@ -149,7 +149,7 @@ if uploaded is not None:
         # Check if each class has at least 2 samples before using stratify
         class_counts = data["target"].value_counts()
         if (class_counts < 2).any():
-            st.warning("⚠️ Some classes have fewer than 2 samples.")
+            st.warning(" Please select your Text & Target Columns.")
             stratify_option = None
         else:
             stratify_option = data["target"]
