@@ -13,7 +13,7 @@ from textblob import TextBlob
 
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
-from sklearn.feature_extraction.text import CountVectorizer, TfidfVectorizer
+from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.naive_bayes import MultinomialNB
 from sklearn.svm import SVC
 from sklearn.linear_model import LogisticRegression
@@ -27,13 +27,11 @@ nltk.download("wordnet", quiet=True)
 nltk.download("omw-1.4", quiet=True)
 nltk.download("averaged_perceptron_tagger", quiet=True)
 
-# Initialize lemmatizer & stopwords
 lemmatizer = WordNetLemmatizer()
 custom_stopwords = set(
     w for w in stopwords.words("english")
     if w not in ["not", "no", "nor", "against", "is", "are", "be", "been"]
 )
-
 pragmatic_words = ["must", "should", "might", "could", "will", "?", "!"]
 
 # =========================================
@@ -85,17 +83,18 @@ def pragmatic_features(text):
         return str(text)
 
 # =========================================
-# Safe Phase-wise Vectorization
+# Safe Vectorization
 # =========================================
-def vectorize_phase(train_texts, test_texts, phase_name, max_features=5000):
+def vectorize_phase(train_texts, test_texts, phase_name, max_features=3000):
     train_texts = [str(t) for t in train_texts]
     test_texts  = [str(t) for t in test_texts]
 
-    # Choose vectorizer
     if phase_name in ["Lexical & Morphological", "Syntactic"]:
-        vectorizer = TfidfVectorizer(max_features=max_features, ngram_range=(1,2), token_pattern=r"(?u)\b\w+\b")
+        vectorizer = TfidfVectorizer(
+            max_features=max_features, ngram_range=(1,2), token_pattern=r"(?u)\b\w+\b"
+        )
     else:
-        vectorizer = TfidfVectorizer(analyzer="char_wb", ngram_range=(3,5), max_features=3000)
+        vectorizer = TfidfVectorizer(analyzer="char_wb", ngram_range=(3,5), max_features=2000)
 
     try:
         X_train = vectorizer.fit_transform(train_texts)
@@ -114,10 +113,9 @@ def vectorize_phase(train_texts, test_texts, phase_name, max_features=5000):
 # =========================================
 def train_and_eval(model, X_train, X_test, y_train, y_test):
     try:
-        # Convert to dense if needed
         if isinstance(model, DecisionTreeClassifier):
-            X_train_in = X_train.toarray() if hasattr(X_train, "toarray") else X_train
-            X_test_in = X_test.toarray() if hasattr(X_test, "toarray") else X_test
+            X_train_in = X_train.toarray()
+            X_test_in = X_test.toarray()
         else:
             X_train_in, X_test_in = X_train, X_test
 
@@ -131,9 +129,9 @@ def train_and_eval(model, X_train, X_test, y_train, y_test):
 # =========================================
 # Streamlit App
 # =========================================
-st.title("📰 Fake News Detection: Phase-wise NLP")
+st.title("Phase-wise NLP Analysis(for different models)")
 
-uploaded = st.file_uploader("Upload CSV", type=["csv"])
+uploaded = st.file_uploader("Upload  Your CSV", type=["csv"])
 
 if uploaded is not None:
     try:
@@ -147,12 +145,21 @@ if uploaded is not None:
         if data["target"].dtype == object:
             data["target"] = LabelEncoder().fit_transform(data["target"].astype(str))
 
+        # ✅ Fix 1: Handle "least populated class" safely
+        # Check if each class has at least 2 samples before using stratify
+        class_counts = data["target"].value_counts()
+        if (class_counts < 2).any():
+            st.warning("⚠️ Some classes have fewer than 2 samples.")
+            stratify_option = None
+        else:
+            stratify_option = data["target"]
+
         X_train, X_test, y_train, y_test = train_test_split(
             data["text"].astype(str),
             data["target"],
             test_size=0.2,
             random_state=42,
-            stratify=data["target"]
+            stratify=stratify_option
         )
 
         # Apply preprocessing phases
@@ -171,18 +178,17 @@ if uploaded is not None:
             "Pragmatic": X_test.apply(pragmatic_features),
         }
 
-        # Models
+        # ✅ Fix 2: Tuning to avoid overfitting
         models = {
-            "Naive Bayes": MultinomialNB(),
-            "SVM": SVC(kernel="linear", probability=True),
-            "Logistic Regression": LogisticRegression(max_iter=1000),
-            "Decision Tree": DecisionTreeClassifier(max_depth=20),
+            "Naive Bayes": MultinomialNB(alpha=1.0),  # add smoothing
+            "SVM": SVC(kernel="linear", C=0.5, probability=True),  # smaller C = less overfit
+            "Logistic Regression": LogisticRegression(max_iter=1000, C=0.7),
+            "Decision Tree": DecisionTreeClassifier(max_depth=10, min_samples_leaf=3),  # shallower tree
         }
 
         results = []
         reports = {}
 
-        # Train & evaluate
         for model_name, model in models.items():
             for phase_name in train_phases.keys():
                 _, Xtr, Xte = vectorize_phase(train_phases[phase_name], test_phases[phase_name], phase_name)
@@ -209,20 +215,8 @@ if uploaded is not None:
         ax.legend()
         st.pyplot(fig)
 
-        # Predict New Text (Optional)
-        st.subheader("📝 Predict New Text")
-        new_text = st.text_area("Enter text to predict")
-        if st.button("Predict"):
-            if new_text.strip():
-                pred_results = []
-                for model_name, model in models.items():
-                    for phase_name in train_phases.keys():
-                        _, Xtr_dummy, _ = vectorize_phase(train_phases[phase_name], [new_text], phase_name)
-                        pred = model.predict(Xtr_dummy)
-                        pred_results.append(f"{model_name} ({phase_name}): {pred[0]}")
-                st.write(pred_results)
-            else:
-                st.warning("Please enter some text!")
+        # ✅ Fix 3: Remove prediction box
+        # (Removed entire "Predict New Text" section)
 
     except Exception as e:
         st.error(f"Error: {e}")
